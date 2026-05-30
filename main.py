@@ -23,7 +23,7 @@ from astrbot.api.provider import ProviderRequest
 from astrbot.api.star import Context, Star, register
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-TAG_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+TAG_NAME_PATTERN = re.compile(r"^[^<>\n\r]+$")
 BRACE_PATTERN = re.compile(r"\{(.*)\}", flags=re.DOTALL)
 
 VALID_POSITIONS = ("user_message_before", "user_message_after", "system_prompt")
@@ -68,9 +68,12 @@ class RecursionLogPlugin(Star):
             tag_name = "Recursion-Log"
         self._tag_name = tag_name
 
-        # Header
+        # Header & Footer
         raw_header = str(config.get("header_text", ""))
         self._header_text = raw_header.replace("\\n", "\n").strip()
+
+        raw_footer = str(config.get("footer_text", ""))
+        self._footer_text = raw_footer.replace("\\n", "\n").strip()
 
         # Data file
         data_dir = Path(get_astrbot_data_path()) / "plugin_data" / "RecursionLog"
@@ -162,6 +165,11 @@ class RecursionLogPlugin(Star):
             parts.append("")
 
         parts.append(f"</{self._tag_name}>")
+
+        if self._footer_text:
+            parts.append("")
+            parts.append(self._footer_text)
+
         return "\n".join(parts)
 
     # -------------------------------------------------------------------

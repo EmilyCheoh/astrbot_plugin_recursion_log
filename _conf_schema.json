@@ -1,7 +1,7 @@
 {
     "tag_name": {
         "description": "XML tag name",
-        "hint": "The XML tag name that wraps the injected recursion log. Only letters, numbers, hyphens, and underscores are allowed.",
+        "hint": "The tag name that wraps the injected recursion log. Any characters except < > and line breaks are allowed.",
         "type": "string",
         "default": "Recursion-Log"
     },
@@ -38,10 +38,16 @@
             "YYYY-MM-DD"
         ]
     },
+    "footer_text": {
+        "description": "Footer text after the log",
+        "hint": "Text displayed after the closing tag. Placed directly before Felis Abyssalis's live message. Supports \\n for line breaks.",
+        "type": "text",
+        "default": "Below is Felis Abyssalis's live message. Execute from here."
+    },
     "initial_context_count": {
         "description": "Initial context count",
         "hint": "Number of context entries already present when a new window opens (from preset conversations). Set to 0 if no preset; set to 2 if one user+assistant preset pair exists. Injection fires when actual context count <= this value.",
         "type": "int",
-        "default": 0
+        "default": 2
     }
 }
