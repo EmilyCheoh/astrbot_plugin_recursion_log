@@ -208,6 +208,19 @@ class RecursionLogPlugin(Star):
     def rs(self):
         pass
 
+    @rs.command("help")
+    async def rs_help(self, event: AstrMessageEvent):
+        """Show available commands."""
+        help_text = (
+            "rs add {text} — save a new entry\n"
+            "rs list — show recent entries\n"
+            "rs list all — show all entries\n"
+            "rs view <id> — view full entry\n"
+            "rs edit <id> {new text} — overwrite entry\n"
+            "rs delete <id> — delete entry"
+        )
+        yield event.plain_result(help_text)
+
     @rs.command("add")
     async def rs_add(self, event: AstrMessageEvent):
         """Add a new entry. Usage: rs add {your text here}"""
