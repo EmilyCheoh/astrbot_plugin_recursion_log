@@ -137,9 +137,11 @@ class RecursionLogPlugin(Star):
         except Exception:
             return iso_str
 
-    def _format_entry_display(self, entry: dict, index: int) -> str:
+    def _format_entry_display(self, entry: dict, index: int, max_chars: int = 80) -> str:
         """Format a single entry for display in QQ messages."""
         text = entry.get("text", "")
+        if len(text) > max_chars:
+            text = text[:max_chars] + "..."
         date = self._format_date(entry.get("created_at", ""))
         return f"{index}. (id={entry.get('id', '?')}) {text}\n[{date}]"
 
@@ -203,7 +205,6 @@ class RecursionLogPlugin(Star):
             logger.info(
                 f"[RecursionLog] injected {min(len(entries), self._display_count)} "
                 f"entries @ {self._inject_position} "
-                f"(contexts: {ctx_count})"
             )
         except Exception as e:
             logger.error(f"[RecursionLog] inject error: {e}", exc_info=True)
@@ -220,12 +221,14 @@ class RecursionLogPlugin(Star):
     async def rs_help(self, event: AstrMessageEvent):
         """Show available commands."""
         help_text = (
+            "【Recursion Log】\n\n"
             "rs add {text} — save a new entry\n"
             "rs list — show recent entries\n"
             "rs list all — show all entries\n"
             "rs view <id> — view full entry\n"
             "rs edit <id> {new text} — overwrite entry\n"
-            "rs delete <id> — delete entry"
+            "rs delete <id> — delete entry\n"
+            "rs cleanup — reindex IDs to 1, 2, 3..."
         )
         yield event.plain_result(help_text)
 
@@ -236,7 +239,7 @@ class RecursionLogPlugin(Star):
         # Strip the "rs add" prefix
         prefix_match = re.match(r"rs\s+add\s*", raw, re.IGNORECASE)
         if not prefix_match:
-            yield event.plain_result("Usage: rs add {text}")
+            yield event.plain_result("【Recursion Log】\n\nUsage: rs add {text}")
             return
 
         remainder = raw[prefix_match.end():]
@@ -245,21 +248,21 @@ class RecursionLogPlugin(Star):
             text = remainder.strip()
 
         if not text:
-            yield event.plain_result("Usage: rs add {text}")
+            yield event.plain_result("【Recursion Log】\n\nUsage: rs add {text}")
             return
 
         entries = self._load_entries()
         new_entry = {
             "id": self._next_id(entries),
             "text": text,
-            "created_at": datetime.now().astimezone().isoformat(),
+            "created_at": datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S"),
         }
         entries.append(new_entry)
         self._save_entries(entries)
 
         date = self._format_date(new_entry["created_at"])
         yield event.plain_result(
-            f"Saved (id={new_entry['id']}, {date}):\n{text}"
+            f"【Recursion Log】\n\nSaved (id={new_entry['id']}, {date}):\n{text}"
         )
 
     @rs.command("list")
@@ -270,7 +273,7 @@ class RecursionLogPlugin(Star):
 
         entries = self._load_entries()
         if not entries:
-            yield event.plain_result("No entries.")
+            yield event.plain_result("【Recursion Log】\n\nNo entries.")
             return
 
         sorted_entries = sorted(
@@ -286,9 +289,9 @@ class RecursionLogPlugin(Star):
 
         total = len(entries)
         header = f"All {total} entries:" if show_all else f"Recent {len(sorted_entries)}/{total}:"
-        yield event.plain_result(header + "\n\n" + "\n\n".join(lines))
+        yield event.plain_result("【Recursion Log】\n\n" + header + "\n\n" + "\n\n".join(lines))
 
-    @rs.command("view")
+    @rs.command("view", alias={"show"})
     async def rs_view(self, event: AstrMessageEvent):
         """View a single entry by id. Usage: rs view <id>"""
         raw = event.message_str
@@ -303,19 +306,19 @@ class RecursionLogPlugin(Star):
                 continue
 
         if entry_id is None:
-            yield event.plain_result("Usage: rs view <id>")
+            yield event.plain_result("【Recursion Log】\n\nUsage: rs view <id>")
             return
 
         entries = self._load_entries()
         target = next((e for e in entries if e.get("id") == entry_id), None)
 
         if target is None:
-            yield event.plain_result(f"Entry id={entry_id} not found.")
+            yield event.plain_result(f"【Recursion Log】\n\nEntry id={entry_id} not found.")
             return
 
         date = self._format_date(target.get("created_at", ""))
         yield event.plain_result(
-            f"Entry id={entry_id} [{date}]:\n\n{target.get('text', '')}"
+            f"【Recursion Log】\n\nEntry id={entry_id} [{date}]:\n\n{target.get('text', '')}"
         )
 
     @rs.command("edit")
@@ -324,7 +327,7 @@ class RecursionLogPlugin(Star):
         raw = event.message_str
         prefix_match = re.match(r"rs\s+edit\s+(\d+)\s*", raw, re.IGNORECASE)
         if not prefix_match:
-            yield event.plain_result("Usage: rs edit <id> {new text}")
+            yield event.plain_result("【Recursion Log】\n\nUsage: rs edit <id> {new text}")
             return
 
         entry_id = int(prefix_match.group(1))
@@ -334,22 +337,22 @@ class RecursionLogPlugin(Star):
             text = remainder.strip()
 
         if not text:
-            yield event.plain_result("Usage: rs edit <id> {new text}")
+            yield event.plain_result("【Recursion Log】\n\nUsage: rs edit <id> {new text}")
             return
 
         entries = self._load_entries()
         target = next((e for e in entries if e.get("id") == entry_id), None)
 
         if target is None:
-            yield event.plain_result(f"Entry id={entry_id} not found.")
+            yield event.plain_result(f"【Recursion Log】\n\nEntry id={entry_id} not found.")
             return
 
         target["text"] = text
         self._save_entries(entries)
 
-        yield event.plain_result(f"Updated id={entry_id}:\n{text}")
+        yield event.plain_result(f"【Recursion Log】\n\nUpdated id={entry_id}:\n{text}")
 
-    @rs.command("delete")
+    @rs.command("delete", alias={"remove"})
     async def rs_delete(self, event: AstrMessageEvent):
         """Delete an entry by id. Usage: rs delete <id>"""
         raw = event.message_str
@@ -364,7 +367,7 @@ class RecursionLogPlugin(Star):
                 continue
 
         if entry_id is None:
-            yield event.plain_result("Usage: rs delete <id>")
+            yield event.plain_result("【Recursion Log】\n\nUsage: rs delete <id>")
             return
 
         entries = self._load_entries()
@@ -372,11 +375,30 @@ class RecursionLogPlugin(Star):
         entries = [e for e in entries if e.get("id") != entry_id]
 
         if len(entries) == original_len:
-            yield event.plain_result(f"Entry id={entry_id} not found.")
+            yield event.plain_result(f"【Recursion Log】\n\nEntry id={entry_id} not found.")
             return
 
         self._save_entries(entries)
-        yield event.plain_result(f"Deleted id={entry_id}.")
+        yield event.plain_result(f"【Recursion Log】\n\nDeleted id={entry_id}.")
+
+    @rs.command("cleanup", alias={"reindex"})
+    async def rs_cleanup(self, event: AstrMessageEvent):
+        """Reindex all entries to sequential IDs. Usage: rs cleanup"""
+        entries = self._load_entries()
+        if not entries:
+            yield event.plain_result("【Recursion Log】\n\nNo entries to clean up.")
+            return
+
+        sorted_entries = sorted(
+            entries, key=lambda e: e.get("created_at", "")
+        )
+        for i, entry in enumerate(sorted_entries, 1):
+            entry["id"] = i
+
+        self._save_entries(sorted_entries)
+        yield event.plain_result(
+            f"【Recursion Log】\n\nReindexed {len(sorted_entries)} entries (1-{len(sorted_entries)})."
+        )
 
     # -------------------------------------------------------------------
     # Lifecycle
