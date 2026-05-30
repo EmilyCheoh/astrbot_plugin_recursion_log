@@ -1,0 +1,47 @@
+{
+    "tag_name": {
+        "description": "XML tag name",
+        "hint": "The XML tag name that wraps the injected recursion log. Only letters, numbers, hyphens, and underscores are allowed.",
+        "type": "string",
+        "default": "Recursion-Log"
+    },
+    "header_text": {
+        "description": "Header text before entries",
+        "hint": "Explanatory text displayed inside the tag, before the numbered entries. Supports \\n for line breaks.",
+        "type": "text",
+        "default": "The following are curated snapshots from previous conversation windows — each one manually selected and preserved by Felis Abyssalis. They are ordered from most recent to oldest. Carry them forward."
+    },
+    "display_count": {
+        "description": "Number of entries to inject",
+        "hint": "How many of the most recent entries to inject when a new conversation window opens.",
+        "type": "int",
+        "default": 5
+    },
+    "inject_position": {
+        "description": "Injection position",
+        "hint": "Where to inject the recursion log in the LLM request. user_message_before: before the user's message; user_message_after: after the user's message; system_prompt: appended to the system prompt.",
+        "type": "string",
+        "default": "user_message_before",
+        "options": [
+            "user_message_before",
+            "user_message_after",
+            "system_prompt"
+        ]
+    },
+    "date_format": {
+        "description": "Date display format",
+        "hint": "How timestamps are displayed in the injected log. MM-DD for month-day, YYYY-MM-DD for full date.",
+        "type": "string",
+        "default": "MM-DD",
+        "options": [
+            "MM-DD",
+            "YYYY-MM-DD"
+        ]
+    },
+    "initial_context_count": {
+        "description": "Initial context count",
+        "hint": "Number of context entries already present when a new window opens (from preset conversations). Set to 0 if no preset; set to 2 if one user+assistant preset pair exists. Injection fires when actual context count <= this value.",
+        "type": "int",
+        "default": 0
+    }
+}

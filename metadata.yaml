@@ -1,0 +1,6 @@
+name: astrbot_plugin_recursion_log
+display_name: "💜 Recursion Log"
+description: Manual conversation window summaries with first-window injection for cross-session continuity.
+version: 1.0.0
+author: Felis Abyssalis
+repo: "https://github.com/EmilyCheoh/astrbot_plugin_recursion_log"
