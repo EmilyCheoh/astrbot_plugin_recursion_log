@@ -265,7 +265,7 @@ class RecursionLogPlugin(Star):
             f"【Recursion Log】\n\nSaved (id={new_entry['id']}, {date}):\n{text}"
         )
 
-    @rs.command("list")
+    @rs.command("list", alias={"ls"})
     async def rs_list(self, event: AstrMessageEvent):
         """List recent entries. Usage: rs list [all]"""
         raw = event.message_str
@@ -352,7 +352,7 @@ class RecursionLogPlugin(Star):
 
         yield event.plain_result(f"【Recursion Log】\n\nUpdated id={entry_id}:\n{text}")
 
-    @rs.command("delete", alias={"remove"})
+    @rs.command("delete", alias={"remove", "del", "rm"})
     async def rs_delete(self, event: AstrMessageEvent):
         """Delete an entry by id. Usage: rs delete <id>"""
         raw = event.message_str
