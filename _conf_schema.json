@@ -38,8 +38,14 @@
             "YYYY-MM-DD"
         ]
     },
+    "inner_footer_text": {
+        "description": "Inner footer text (inside tag)",
+        "hint": "Text displayed inside the tag, after the last entry and before the closing tag. Supports \\n for line breaks.",
+        "type": "text",
+        "default": ""
+    },
     "footer_text": {
-        "description": "Footer text after the log",
+        "description": "Footer text (outside tag)",
         "hint": "Text displayed after the closing tag. Placed directly before Felis Abyssalis's live message. Supports \\n for line breaks.",
         "type": "text",
         "default": "Below is Felis Abyssalis's live message. Execute from here."

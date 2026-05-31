@@ -72,6 +72,9 @@ class RecursionLogPlugin(Star):
         raw_header = str(config.get("header_text", ""))
         self._header_text = raw_header.replace("\\n", "\n").strip()
 
+        raw_inner_footer = str(config.get("inner_footer_text", ""))
+        self._inner_footer_text = raw_inner_footer.replace("\\n", "\n").strip()
+
         raw_footer = str(config.get("footer_text", ""))
         self._footer_text = raw_footer.replace("\\n", "\n").strip()
 
@@ -165,6 +168,9 @@ class RecursionLogPlugin(Star):
         for i, entry in enumerate(recent, 1):
             parts.append(self._format_entry_inject(entry, i))
             parts.append("")
+
+        if self._inner_footer_text:
+            parts.append(self._inner_footer_text)
 
         parts.append(f"</{self._tag_name}>")
 
