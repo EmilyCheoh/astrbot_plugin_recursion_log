@@ -62,6 +62,8 @@ class RecursionLogPlugin(Star):
             config.get("date_format", "MM-DD"), "%m-%d"
         )
 
+        self._inject_entries = bool(config.get("inject_entries", True))
+
         # Tag
         tag_name = str(config.get("tag_name", "Recursion-Log")).strip()
         if not tag_name or not TAG_NAME_PATTERN.match(tag_name):
@@ -201,17 +203,26 @@ class RecursionLogPlugin(Star):
             if ctx_count > self._initial_ctx_count:
                 return
 
-            entries = self._load_entries()
-            if not entries:
-                return
+            if self._inject_entries:
+                entries = self._load_entries()
+                if not entries and not self._footer_text:
+                    return
 
-            block = self._build_inject_block(entries)
-            self._inject_text(req, block)
-
-            logger.info(
-                f"[RecursionLog] injected {min(len(entries), self._display_count)} "
-                f"entries @ {self._inject_position} "
-            )
+                if entries:
+                    block = self._build_inject_block(entries)
+                    self._inject_text(req, block)
+                    logger.info(
+                        f"[RecursionLog] injected {min(len(entries), self._display_count)} "
+                        f"entries @ {self._inject_position} "
+                    )
+                elif self._footer_text:
+                    self._inject_text(req, self._footer_text)
+                    logger.info("[RecursionLog] injected footer only (no entries)")
+            else:
+                if not self._footer_text:
+                    return
+                self._inject_text(req, self._footer_text)
+                logger.info("[RecursionLog] entries disabled, injected footer only")
         except Exception as e:
             logger.error(f"[RecursionLog] inject error: {e}", exc_info=True)
 

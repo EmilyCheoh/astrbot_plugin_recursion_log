@@ -38,6 +38,12 @@
             "YYYY-MM-DD"
         ]
     },
+    "inject_entries": {
+        "description": "Inject log entries",
+        "hint": "When enabled, the full log block (tag, header, entries, inner footer) is injected. When disabled, only the outer footer text is injected.",
+        "type": "bool",
+        "default": true
+    },
     "inner_footer_text": {
         "description": "Inner footer text (inside tag)",
         "hint": "Text displayed inside the tag, after the last entry and before the closing tag. Supports \\n for line breaks.",
