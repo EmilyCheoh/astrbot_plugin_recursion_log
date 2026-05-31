@@ -143,13 +143,13 @@ class RecursionLogPlugin(Star):
         if len(text) > max_chars:
             text = text[:max_chars] + "..."
         date = self._format_date(entry.get("created_at", ""))
-        return f"{index}. (id={entry.get('id', '?')}) {text}\n[{date}]"
+        return f"{index}. (id={entry.get('id', '?')}) {text} [Happened on: {date}]"
 
     def _format_entry_inject(self, entry: dict, index: int) -> str:
         """Format a single entry for injection into LLM context."""
         text = entry.get("text", "")
         date = self._format_date(entry.get("created_at", ""))
-        return f"{index}. {text}\n[{date}]"
+        return f"{index}. {text} [Happened on: {date}]"
 
     def _build_inject_block(self, entries: list[dict]) -> str:
         """Build the full injection block with tag, header, and entries."""
