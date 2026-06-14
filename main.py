@@ -170,7 +170,7 @@ class RecursionLogPlugin(Star):
         for i, entry in enumerate(active, 1):
             content = entry.get("content", "")
             date = self._format_date(entry.get("date", ""))
-            lines.append(f"{i}. {content} [{date}]")
+            lines.append(f"{i}. {content} [Recorded on: {date}]")
 
         return "\n".join(lines)
 
