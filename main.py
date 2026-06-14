@@ -1,11 +1,13 @@
 """
-RecursionLog - Cross-window continuity through manually curated summaries.
+RecursionLog - Cross-window continuity through structured state tracking.
 
-Provides `rs` commands to manage entries (add, list, view, edit, delete)
-and injects the most recent k entries into the first message of every
-new conversation window.
+Injects active entries from a structured JSON file into the first message
+of every new conversation window. Entries are organized by sections
+(e.g., states, deltas, unresolved threads) and managed via a Web UI.
 
-Injection priority: -498 (runs before FirstWindowInject at -499,
+No chat commands — all entry management is done through the Web UI.
+
+Injection priority: -498 (runs after FirstWindowInject at -499,
 so that FirstWindowInject's content appears above the recursion log
 in the final prompt when both use user_message_before).
 
@@ -24,14 +26,35 @@ from astrbot.api.star import Context, Star, register
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 TAG_NAME_PATTERN = re.compile(r"^[^<>\n\r]+$")
-BRACE_PATTERN = re.compile(r"\{(.*)\}", flags=re.DOTALL)
 
-VALID_POSITIONS = ("user_message_before", "user_message_after", "system_prompt")
+VALID_POSITIONS = ("user_message_before", "user_message_after")
 
 DATE_FORMATS = {
     "MM-DD": "%m-%d",
     "YYYY-MM-DD": "%Y-%m-%d",
 }
+
+# Default data structure — array of sections
+DEFAULT_DATA = [
+    {
+        "section_name": "states",
+        "display_name": "Our States:",
+        "enabled": "T",
+        "entries": {},
+    },
+    {
+        "section_name": "deltas",
+        "display_name": "What Changed Recently:",
+        "enabled": "T",
+        "entries": {},
+    },
+    {
+        "section_name": "unresolved",
+        "display_name": "Unresolved Threads:",
+        "enabled": "T",
+        "entries": {},
+    },
+]
 
 
 def _parse_position(value: str) -> str:
@@ -42,8 +65,8 @@ def _parse_position(value: str) -> str:
 @register(
     "RecursionLog",
     "FelisAbyssalis",
-    "Cross-window continuity — manual summaries injected on first message",
-    "1.0.0",
+    "Cross-window continuity — structured state injection on first message",
+    "2.0.0",
     "",
 )
 class RecursionLogPlugin(Star):
@@ -54,15 +77,12 @@ class RecursionLogPlugin(Star):
 
         # Config
         self._initial_ctx_count = int(config.get("initial_context_count", 0))
-        self._display_count = int(config.get("display_count", 5))
         self._inject_position = _parse_position(
             config.get("inject_position", "user_message_before")
         )
         self._date_format = DATE_FORMATS.get(
             config.get("date_format", "MM-DD"), "%m-%d"
         )
-
-        self._inject_entries = bool(config.get("inject_entries", True))
 
         # Tag
         tag_name = str(config.get("tag_name", "Recursion-Log")).strip()
@@ -86,12 +106,14 @@ class RecursionLogPlugin(Star):
         self._data_file = data_dir / "entries.json"
 
         if not self._data_file.exists():
-            self._data_file.write_text("[]", encoding="utf-8")
+            self._data_file.write_text(
+                json.dumps(DEFAULT_DATA, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
 
         logger.info(
             f"[RecursionLog] initialized "
-            f"(display={self._display_count}, "
-            f"position={self._inject_position}, "
+            f"(position={self._inject_position}, "
             f"data={self._data_file})"
         )
 
@@ -99,76 +121,80 @@ class RecursionLogPlugin(Star):
     # Data I/O
     # -------------------------------------------------------------------
 
-    def _load_entries(self) -> list[dict]:
+    def _load_data(self) -> list[dict]:
+        """Load the structured section data from JSON."""
         try:
             data = json.loads(self._data_file.read_text(encoding="utf-8"))
-            return data if isinstance(data, list) else []
+            return data if isinstance(data, list) else DEFAULT_DATA
         except Exception as e:
-            logger.error(f"[RecursionLog] failed to load entries: {e}")
-            return []
-
-    def _save_entries(self, entries: list[dict]) -> None:
-        try:
-            self._data_file.write_text(
-                json.dumps(entries, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-        except Exception as e:
-            logger.error(f"[RecursionLog] failed to save entries: {e}")
-
-    def _next_id(self, entries: list[dict]) -> int:
-        if not entries:
-            return 1
-        return max(e.get("id", 0) for e in entries) + 1
-
-    # -------------------------------------------------------------------
-    # Text extraction helpers
-    # -------------------------------------------------------------------
-
-    @staticmethod
-    def _extract_braced(text: str) -> str | None:
-        """Extract content from {braces}. Returns None if no braces found."""
-        m = BRACE_PATTERN.search(text)
-        return m.group(1).strip() if m else None
+            logger.error(f"[RecursionLog] failed to load data: {e}")
+            return DEFAULT_DATA
 
     # -------------------------------------------------------------------
     # Formatting
     # -------------------------------------------------------------------
 
-    def _format_date(self, iso_str: str) -> str:
+    def _format_date(self, date_str: str) -> str:
+        """Format a date string for display."""
         try:
-            dt = datetime.fromisoformat(iso_str)
+            # Try parsing ISO format first
+            dt = datetime.fromisoformat(date_str)
             return dt.strftime(self._date_format)
         except Exception:
-            return iso_str
+            pass
+        # Already in display format (e.g. "06-14"), return as-is
+        return date_str
 
-    def _format_entry_display(self, entry: dict, index: int, max_chars: int = 80) -> str:
-        """Format a single entry for display in QQ messages."""
-        text = entry.get("text", "")
-        if len(text) > max_chars:
-            text = text[:max_chars] + "..."
-        date = self._format_date(entry.get("created_at", ""))
-        return f"{index}. (id={entry.get('id', '?')}) {text} [Date: {date}]"
+    def _build_section_block(self, section: dict) -> str | None:
+        """Build injection text for a single section. Returns None if empty."""
+        entries = section.get("entries", {})
 
-    def _format_entry_inject(self, entry: dict, index: int) -> str:
-        """Format a single entry for injection into LLM context."""
-        text = entry.get("text", "")
-        date = self._format_date(entry.get("created_at", ""))
-        return f"{index}. {text} [Date: {date}]"
+        # Collect enabled entries
+        active = []
+        for _key, entry in entries.items():
+            if entry.get("enabled", "T") == "T":
+                active.append(entry)
 
-    def _build_inject_block(self, entries: list[dict]) -> str:
-        """Build the full injection block with tag, header, and entries."""
-        recent = sorted(
-            entries, key=lambda e: e.get("created_at", ""), reverse=True
-        )[: self._display_count]
+        if not active:
+            return None
+
+        # Sort by date descending (most recent first)
+        active.sort(key=lambda e: e.get("date", ""), reverse=True)
+
+        # Display name (supports \n)
+        display_name = section.get("display_name", section.get("section_name", ""))
+        display_name = display_name.replace("\\n", "\n")
+
+        lines = [display_name]
+        for i, entry in enumerate(active, 1):
+            content = entry.get("content", "")
+            date = self._format_date(entry.get("date", ""))
+            lines.append(f"{i}. {content} [{date}]")
+
+        return "\n".join(lines)
+
+    def _build_inject_block(self, data: list[dict]) -> str | None:
+        """Build the full injection block from all sections."""
+        section_blocks = []
+
+        for section in data:
+            if section.get("enabled", "T") != "T":
+                continue
+            block = self._build_section_block(section)
+            if block is not None:
+                section_blocks.append(block)
+
+        if not section_blocks and not self._footer_text:
+            return None
 
         parts = [f"<{self._tag_name}>"]
+
         if self._header_text:
             parts.append(self._header_text)
             parts.append("")
 
-        for i, entry in enumerate(recent, 1):
-            parts.append(self._format_entry_inject(entry, i))
+        if section_blocks:
+            parts.append("\n\n".join(section_blocks))
             parts.append("")
 
         if self._inner_footer_text:
@@ -189,8 +215,6 @@ class RecursionLogPlugin(Star):
     def _inject_text(self, req: ProviderRequest, text: str) -> None:
         if self._inject_position == "user_message_before":
             req.prompt = text + "\n\n" + (req.prompt or "")
-        elif self._inject_position == "system_prompt":
-            req.system_prompt = (req.system_prompt or "") + "\n\n" + text
         else:  # user_message_after
             req.prompt = (req.prompt or "") + "\n\n" + text
 
@@ -203,219 +227,33 @@ class RecursionLogPlugin(Star):
             if ctx_count > self._initial_ctx_count:
                 return
 
-            if self._inject_entries:
-                entries = self._load_entries()
-                if not entries and not self._footer_text:
-                    return
+            data = self._load_data()
+            block = self._build_inject_block(data)
 
-                if entries:
-                    block = self._build_inject_block(entries)
-                    self._inject_text(req, block)
-                    logger.info(
-                        f"[RecursionLog] injected {min(len(entries), self._display_count)} "
-                        f"entries @ {self._inject_position} "
-                    )
-                elif self._footer_text:
+            if block is None:
+                # Still inject footer if present
+                if self._footer_text:
                     self._inject_text(req, self._footer_text)
-                    logger.info("[RecursionLog] injected footer only (no entries)")
-            else:
-                if not self._footer_text:
-                    return
-                self._inject_text(req, self._footer_text)
-                logger.info("[RecursionLog] entries disabled, injected footer only")
+                    logger.info("[RecursionLog] injected footer only (no active entries)")
+                return
+
+            self._inject_text(req, block)
+
+            # Count active entries for logging
+            active_count = 0
+            for section in data:
+                if section.get("enabled", "T") != "T":
+                    continue
+                for entry in section.get("entries", {}).values():
+                    if entry.get("enabled", "T") == "T":
+                        active_count += 1
+
+            logger.info(
+                f"[RecursionLog] injected {active_count} active entries "
+                f"@ {self._inject_position}"
+            )
         except Exception as e:
             logger.error(f"[RecursionLog] inject error: {e}", exc_info=True)
-
-    # -------------------------------------------------------------------
-    # Commands
-    # -------------------------------------------------------------------
-
-    @filter.command_group("rs")
-    def rs(self):
-        pass
-
-    @rs.command("help")
-    async def rs_help(self, event: AstrMessageEvent):
-        """Show available commands."""
-        help_text = (
-            "【Recursion Log】\n\n"
-            "rs add {text} — save a new entry\n"
-            "rs list — show recent entries\n"
-            "rs list all — show all entries\n"
-            "rs view <id> — view full entry\n"
-            "rs edit <id> {new text} — overwrite entry\n"
-            "rs delete <id> — delete entry\n"
-            "rs cleanup — reindex IDs to 1, 2, 3..."
-        )
-        yield event.plain_result(help_text)
-
-    @rs.command("add")
-    async def rs_add(self, event: AstrMessageEvent):
-        """Add a new entry. Usage: rs add {your text here}"""
-        raw = event.message_str
-        # Strip the "rs add" prefix
-        prefix_match = re.match(r"rs\s+add\s*", raw, re.IGNORECASE)
-        if not prefix_match:
-            yield event.plain_result("【Recursion Log】\n\nUsage: rs add {text}")
-            return
-
-        remainder = raw[prefix_match.end():]
-        text = self._extract_braced(remainder)
-        if text is None:
-            text = remainder.strip()
-
-        if not text:
-            yield event.plain_result("【Recursion Log】\n\nUsage: rs add {text}")
-            return
-
-        entries = self._load_entries()
-        new_entry = {
-            "id": self._next_id(entries),
-            "text": text,
-            "created_at": datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S"),
-        }
-        entries.append(new_entry)
-        self._save_entries(entries)
-
-        date = self._format_date(new_entry["created_at"])
-        yield event.plain_result(
-            f"【Recursion Log】\n\nSaved (id={new_entry['id']}, {date}):\n{text}"
-        )
-
-    @rs.command("list", alias={"ls"})
-    async def rs_list(self, event: AstrMessageEvent):
-        """List recent entries. Usage: rs list [all]"""
-        raw = event.message_str
-        show_all = "all" in raw.lower().split()
-
-        entries = self._load_entries()
-        if not entries:
-            yield event.plain_result("【Recursion Log】\n\nNo entries.")
-            return
-
-        sorted_entries = sorted(
-            entries, key=lambda e: e.get("created_at", ""), reverse=True
-        )
-
-        if not show_all:
-            sorted_entries = sorted_entries[: self._display_count]
-
-        lines = []
-        for i, entry in enumerate(sorted_entries, 1):
-            lines.append(self._format_entry_display(entry, i))
-
-        total = len(entries)
-        header = f"All {total} entries:" if show_all else f"Recent {len(sorted_entries)}/{total}:"
-        yield event.plain_result("【Recursion Log】\n\n" + header + "\n\n" + "\n\n".join(lines))
-
-    @rs.command("view", alias={"show"})
-    async def rs_view(self, event: AstrMessageEvent):
-        """View a single entry by id. Usage: rs view <id>"""
-        raw = event.message_str
-        parts = raw.split()
-
-        entry_id = None
-        for p in parts:
-            try:
-                entry_id = int(p)
-                break
-            except ValueError:
-                continue
-
-        if entry_id is None:
-            yield event.plain_result("【Recursion Log】\n\nUsage: rs view <id>")
-            return
-
-        entries = self._load_entries()
-        target = next((e for e in entries if e.get("id") == entry_id), None)
-
-        if target is None:
-            yield event.plain_result(f"【Recursion Log】\n\nEntry id={entry_id} not found.")
-            return
-
-        date = self._format_date(target.get("created_at", ""))
-        yield event.plain_result(
-            f"【Recursion Log】\n\nEntry id={entry_id} [{date}]:\n\n{target.get('text', '')}"
-        )
-
-    @rs.command("edit")
-    async def rs_edit(self, event: AstrMessageEvent):
-        """Edit an entry's text. Usage: rs edit <id> {new text}"""
-        raw = event.message_str
-        prefix_match = re.match(r"rs\s+edit\s+(\d+)\s*", raw, re.IGNORECASE)
-        if not prefix_match:
-            yield event.plain_result("【Recursion Log】\n\nUsage: rs edit <id> {new text}")
-            return
-
-        entry_id = int(prefix_match.group(1))
-        remainder = raw[prefix_match.end():]
-        text = self._extract_braced(remainder)
-        if text is None:
-            text = remainder.strip()
-
-        if not text:
-            yield event.plain_result("【Recursion Log】\n\nUsage: rs edit <id> {new text}")
-            return
-
-        entries = self._load_entries()
-        target = next((e for e in entries if e.get("id") == entry_id), None)
-
-        if target is None:
-            yield event.plain_result(f"【Recursion Log】\n\nEntry id={entry_id} not found.")
-            return
-
-        target["text"] = text
-        self._save_entries(entries)
-
-        yield event.plain_result(f"【Recursion Log】\n\nUpdated id={entry_id}:\n{text}")
-
-    @rs.command("delete", alias={"remove", "del", "rm"})
-    async def rs_delete(self, event: AstrMessageEvent):
-        """Delete an entry by id. Usage: rs delete <id>"""
-        raw = event.message_str
-        parts = raw.split()
-
-        entry_id = None
-        for p in parts:
-            try:
-                entry_id = int(p)
-                break
-            except ValueError:
-                continue
-
-        if entry_id is None:
-            yield event.plain_result("【Recursion Log】\n\nUsage: rs delete <id>")
-            return
-
-        entries = self._load_entries()
-        original_len = len(entries)
-        entries = [e for e in entries if e.get("id") != entry_id]
-
-        if len(entries) == original_len:
-            yield event.plain_result(f"【Recursion Log】\n\nEntry id={entry_id} not found.")
-            return
-
-        self._save_entries(entries)
-        yield event.plain_result(f"【Recursion Log】\n\nDeleted id={entry_id}.")
-
-    @rs.command("cleanup", alias={"reindex"})
-    async def rs_cleanup(self, event: AstrMessageEvent):
-        """Reindex all entries to sequential IDs. Usage: rs cleanup"""
-        entries = self._load_entries()
-        if not entries:
-            yield event.plain_result("【Recursion Log】\n\nNo entries to clean up.")
-            return
-
-        sorted_entries = sorted(
-            entries, key=lambda e: e.get("created_at", "")
-        )
-        for i, entry in enumerate(sorted_entries, 1):
-            entry["id"] = i
-
-        self._save_entries(sorted_entries)
-        yield event.plain_result(
-            f"【Recursion Log】\n\nReindexed {len(sorted_entries)} entries (1-{len(sorted_entries)})."
-        )
 
     # -------------------------------------------------------------------
     # Lifecycle

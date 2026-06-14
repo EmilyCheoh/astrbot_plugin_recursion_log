@@ -1,10 +1,4 @@
 {
-    "inject_entries": {
-        "description": "Inject log entries",
-        "hint": "When enabled, the full log block (tag, header, entries, inner footer) is injected. When disabled, only the outer footer text is injected.",
-        "type": "bool",
-        "default": true
-    },
     "tag_name": {
         "description": "XML tag name",
         "hint": "The tag name that wraps the injected recursion log. Any characters except < > and line breaks are allowed.",
@@ -12,26 +6,19 @@
         "default": "Recursion-Log"
     },
     "header_text": {
-        "description": "Header text before entries",
-        "hint": "Explanatory text displayed inside the tag, before the numbered entries. Supports \\n for line breaks.",
+        "description": "Header text before sections",
+        "hint": "Explanatory text displayed inside the tag, before the first section. Supports \\n for line breaks.",
         "type": "text",
-        "default": "The following are curated snapshots from previous conversation windows — each one manually selected and preserved by Felis Abyssalis. They are ordered from most recent to oldest. Carry them forward."
-    },
-    "display_count": {
-        "description": "Number of entries to inject",
-        "hint": "How many of the most recent entries to inject when a new conversation window opens.",
-        "type": "int",
-        "default": 5
+        "default": ""
     },
     "inject_position": {
         "description": "Injection position",
-        "hint": "Where to inject the recursion log in the LLM request. user_message_before: before the user's message; user_message_after: after the user's message; system_prompt: appended to the system prompt.",
+        "hint": "Where to inject the recursion log in the LLM request. user_message_before: before the user's message; user_message_after: after the user's message.",
         "type": "string",
         "default": "user_message_before",
         "options": [
             "user_message_before",
-            "user_message_after",
-            "system_prompt"
+            "user_message_after"
         ]
     },
     "date_format": {
@@ -46,7 +33,7 @@
     },
     "inner_footer_text": {
         "description": "Inner footer text (inside tag)",
-        "hint": "Text displayed inside the tag, after the last entry and before the closing tag. Supports \\n for line breaks.",
+        "hint": "Text displayed inside the tag, after the last section and before the closing tag. Supports \\n for line breaks.",
         "type": "text",
         "default": ""
     },
