@@ -167,10 +167,14 @@ class RecursionLogPlugin(Star):
         display_name = display_name.replace("\\n", "\n")
 
         lines = [display_name]
+        single = len(active) == 1
         for i, entry in enumerate(active, 1):
             content = entry.get("content", "")
-            date = self._format_date(entry.get("date", ""))
-            lines.append(f"{i}. {content} [Recorded on: {date}]")
+            date_raw = entry.get("date", "").strip()
+            date = self._format_date(date_raw) if date_raw else ""
+            prefix = "" if single else f"{i}. "
+            suffix = f" [Recorded on: {date}]" if date else ""
+            lines.append(f"{prefix}{content}{suffix}")
 
         return "\n".join(lines)
 
