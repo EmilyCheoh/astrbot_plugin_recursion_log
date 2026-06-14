@@ -76,6 +76,7 @@ class RecursionLogPlugin(Star):
         self.config = config
 
         # Config
+        self._inject_entries = bool(config.get("inject_entries", True))
         self._initial_ctx_count = int(config.get("initial_context_count", 0))
         self._inject_position = _parse_position(
             config.get("inject_position", "user_message_before")
@@ -112,7 +113,7 @@ class RecursionLogPlugin(Star):
             )
 
         logger.info(
-            f"[RecursionLog] initialized "
+            f"[💜 RecursionLog] initialized "
             f"(position={self._inject_position}, "
             f"data={self._data_file})"
         )
@@ -127,7 +128,7 @@ class RecursionLogPlugin(Star):
             data = json.loads(self._data_file.read_text(encoding="utf-8"))
             return data if isinstance(data, list) else DEFAULT_DATA
         except Exception as e:
-            logger.error(f"[RecursionLog] failed to load data: {e}")
+            logger.error(f"[💜 RecursionLog] failed to load data: {e}")
             return DEFAULT_DATA
 
     # -------------------------------------------------------------------
@@ -227,6 +228,12 @@ class RecursionLogPlugin(Star):
             if ctx_count > self._initial_ctx_count:
                 return
 
+            if not self._inject_entries:
+                # Master switch off — only inject footer
+                if self._footer_text:
+                    self._inject_text(req, self._footer_text)
+                return
+
             data = self._load_data()
             block = self._build_inject_block(data)
 
@@ -234,7 +241,6 @@ class RecursionLogPlugin(Star):
                 # Still inject footer if present
                 if self._footer_text:
                     self._inject_text(req, self._footer_text)
-                    logger.info("[RecursionLog] injected footer only (no active entries)")
                 return
 
             self._inject_text(req, block)
@@ -249,15 +255,15 @@ class RecursionLogPlugin(Star):
                         active_count += 1
 
             logger.info(
-                f"[RecursionLog] injected {active_count} active entries "
+                f"[💜 RecursionLog] injected {active_count} active entries "
                 f"@ {self._inject_position}"
             )
         except Exception as e:
-            logger.error(f"[RecursionLog] inject error: {e}", exc_info=True)
+            logger.error(f"[💜 RecursionLog] inject error: {e}", exc_info=True)
 
     # -------------------------------------------------------------------
     # Lifecycle
     # -------------------------------------------------------------------
 
     async def terminate(self):
-        logger.info("[RecursionLog] stopped")
+        logger.info("[💜 RecursionLog] stopped")

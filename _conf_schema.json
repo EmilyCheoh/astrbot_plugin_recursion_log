@@ -1,4 +1,10 @@
 {
+    "inject_entries": {
+        "description": "Inject log entries",
+        "hint": "When enabled, the full log block (tag, header, entries, inner footer) is injected. When disabled, only the outer footer text is injected.",
+        "type": "bool",
+        "default": true
+    },
     "tag_name": {
         "description": "XML tag name",
         "hint": "The tag name that wraps the injected recursion log. Any characters except < > and line breaks are allowed.",
