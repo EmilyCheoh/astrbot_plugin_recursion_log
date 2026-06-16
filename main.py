@@ -162,11 +162,10 @@ class RecursionLogPlugin(Star):
         # Sort by date descending (most recent first)
         active.sort(key=lambda e: e.get("date", ""), reverse=True)
 
-        # Display name (supports \n)
-        display_name = section.get("display_name", section.get("section_name", ""))
-        display_name = display_name.replace("\\n", "\n")
+        # Display name (supports \n) — skip if empty/missing
+        display_name = (section.get("display_name") or "").replace("\\n", "\n").strip()
 
-        lines = [display_name]
+        lines = [display_name] if display_name else []
         single = len(active) == 1
         for i, entry in enumerate(active, 1):
             content = entry.get("content", "")
@@ -200,9 +199,9 @@ class RecursionLogPlugin(Star):
 
         if section_blocks:
             parts.append("\n\n".join(section_blocks))
-            parts.append("")
 
         if self._inner_footer_text:
+            parts.append("")
             parts.append(self._inner_footer_text)
 
         parts.append(f"</{self._tag_name}>")
