@@ -150,16 +150,18 @@ class RecursionLogPlugin(Star):
         """Build injection text for a single section. Returns None if empty."""
         entries = section.get("entries", {})
 
-        # Collect enabled entries
+        # Collect enabled entries in reverse key order (matches UI display),
+        # then stable-sort by date so same-date entries keep drag order
         active = []
-        for _key, entry in entries.items():
+        for key in sorted(entries.keys(), key=lambda k: int(k.split("_")[-1]), reverse=True):
+            entry = entries[key]
             if entry.get("enabled", "T") == "T":
                 active.append(entry)
 
         if not active:
             return None
 
-        # Sort by date descending (most recent first)
+        # Stable sort by date descending; same-date entries keep reverse-key order
         active.sort(key=lambda e: e.get("date", ""), reverse=True)
 
         # Display name (supports \n) — skip if empty/missing
