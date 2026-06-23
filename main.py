@@ -174,7 +174,7 @@ class RecursionLogPlugin(Star):
             date_raw = entry.get("date", "").strip()
             date = self._format_date(date_raw) if date_raw else ""
             prefix = "" if single else f"{i}. "
-            suffix = f" [Recorded on: {date}]" if date else ""
+            suffix = f" [Date: {date}]" if date else ""
             lines.append(f"{prefix}{content}{suffix}")
 
         return "\n".join(lines)
@@ -190,8 +190,10 @@ class RecursionLogPlugin(Star):
             if block is not None:
                 section_blocks.append(block)
 
-        if not section_blocks and not self._footer_text:
-            return None
+        if not section_blocks:
+            # Nothing to inject — skip the XML tag entirely,
+            # return only footer_text if present
+            return self._footer_text if self._footer_text else None
 
         parts = [f"<{self._tag_name}>"]
 
