@@ -1,9 +1,10 @@
 """
 RecursionLog - Cross-window continuity through structured state tracking.
 
-Injects active entries from a structured JSON file into the first message
-of every new conversation window. Entries are organized by sections
-(e.g., states, deltas, unresolved threads) and managed via a Web UI.
+Injects active entries from a structured JSON file into a new window's
+first user message, or into the system prompt on every LLM request.
+Entries are organized by sections (e.g., states, deltas, unresolved
+threads) and managed via a Web UI.
 
 No chat commands — all entry management is done through the Web UI.
 
@@ -27,7 +28,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 TAG_NAME_PATTERN = re.compile(r"^[^<>\n\r]+$")
 
-VALID_POSITIONS = ("user_message_before", "user_message_after")
+VALID_POSITIONS = ("user_message_before", "user_message_after", "system_prompt")
 
 DATE_FORMATS = {
     "MM-DD": "%m-%d",
@@ -65,7 +66,7 @@ def _parse_position(value: str) -> str:
 @register(
     "RecursionLog",
     "FelisAbyssalis",
-    "Cross-window continuity — structured state injection on first message",
+    "Cross-window continuity — structured state injection",
     "2.0.0",
     "",
 )
@@ -179,7 +180,9 @@ class RecursionLogPlugin(Star):
 
         return "\n".join(lines)
 
-    def _build_inject_block(self, data: list[dict]) -> str | None:
+    def _build_inject_block(
+        self, data: list[dict], *, include_footer: bool = True
+    ) -> str | None:
         """Build the full injection block from all sections."""
         section_blocks = []
 
@@ -193,7 +196,7 @@ class RecursionLogPlugin(Star):
         if not section_blocks:
             # Nothing to inject — skip the XML tag entirely,
             # return only footer_text if present
-            return self._footer_text if self._footer_text else None
+            return self._footer_text if include_footer and self._footer_text else None
 
         parts = [f"<{self._tag_name}>"]
 
@@ -210,7 +213,7 @@ class RecursionLogPlugin(Star):
 
         parts.append(f"</{self._tag_name}>")
 
-        if self._footer_text:
+        if include_footer and self._footer_text:
             parts.append("")
             parts.append(self._footer_text)
 
@@ -221,7 +224,10 @@ class RecursionLogPlugin(Star):
     # -------------------------------------------------------------------
 
     def _inject_text(self, req: ProviderRequest, text: str) -> None:
-        if self._inject_position == "user_message_before":
+        if self._inject_position == "system_prompt":
+            current = req.system_prompt or ""
+            req.system_prompt = current + "\n\n" + text if current else text
+        elif self._inject_position == "user_message_before":
             req.prompt = text + "\n\n" + (req.prompt or "")
         else:  # user_message_after
             req.prompt = (req.prompt or "") + "\n\n" + text
@@ -231,22 +237,28 @@ class RecursionLogPlugin(Star):
         self, event: AstrMessageEvent, req: ProviderRequest
     ):
         try:
-            ctx_count = len(req.contexts) if req.contexts else 0
-            if ctx_count > self._initial_ctx_count:
-                return
+            is_system = self._inject_position == "system_prompt"
+
+            # User modes inject only at the start of a window;
+            # system mode must be rebuilt on every request.
+            if not is_system:
+                ctx_count = len(req.contexts) if req.contexts else 0
+                if ctx_count > self._initial_ctx_count:
+                    return
 
             if not self._inject_entries:
-                # Master switch off — only inject footer
-                if self._footer_text:
+                # User modes retain the footer-only behavior.
+                if not is_system and self._footer_text:
                     self._inject_text(req, self._footer_text)
                 return
 
             data = self._load_data()
-            block = self._build_inject_block(data)
+            block = self._build_inject_block(data, include_footer=not is_system)
 
             if block is None:
-                # Still inject footer if present
-                if self._footer_text:
+                # No enabled entries: system mode injects nothing.
+                # User modes retain the existing footer-only behavior.
+                if not is_system and self._footer_text:
                     self._inject_text(req, self._footer_text)
                 return
 

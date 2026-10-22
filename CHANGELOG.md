@@ -1,3 +1,6 @@
+## Oct 22
+insert to system prompt
+
 ## June 14
 
 v2.0.0 — full restructure

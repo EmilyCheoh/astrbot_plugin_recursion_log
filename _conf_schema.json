@@ -1,7 +1,7 @@
 {
     "inject_entries": {
         "description": "Inject log entries",
-        "hint": "When enabled, the full log block (tag, header, entries, inner footer) is injected. When disabled, only the outer footer text is injected.",
+        "hint": "When enabled, inject the log block (tag, header, entries, inner footer). When disabled, user-message modes inject only the outer footer; system_prompt injects nothing.",
         "type": "bool",
         "default": true
     },
@@ -19,12 +19,13 @@
     },
     "inject_position": {
         "description": "Injection position",
-        "hint": "Where to inject the recursion log in the LLM request. user_message_before: before the user's message; user_message_after: after the user's message.",
+        "hint": "user_message_before / user_message_after: inject once in the first user message of a new window. system_prompt: append the log to the existing system prompt on every LLM request.",
         "type": "string",
         "default": "user_message_before",
         "options": [
             "user_message_before",
-            "user_message_after"
+            "user_message_after",
+            "system_prompt"
         ]
     },
     "date_format": {
@@ -44,14 +45,14 @@
         "default": ""
     },
     "footer_text": {
-        "description": "Footer text (outside tag)",
-        "hint": "Text displayed after the closing tag. Placed directly before Felis Abyssalis's live message. Supports \\n for line breaks.",
+        "description": "Footer text (OUTSIDE tag)",
+        "hint": "Text displayed after the closing tag in user-message modes only. Supports \\n for line breaks.",
         "type": "text",
         "default": "Below is Felis Abyssalis's live message. Execute from here."
     },
     "initial_context_count": {
         "description": "Initial context count",
-        "hint": "Number of context entries already present when a new window opens (from preset conversations). Set to 0 if no preset; set to 2 if one user+assistant preset pair exists. Injection fires when actual context count <= this value.",
+        "hint": "User-message modes only: inject when context count is at most this value. Set to 0 if no preset, or 2 for one user+assistant preset pair.",
         "type": "int",
         "default": 2
     }
