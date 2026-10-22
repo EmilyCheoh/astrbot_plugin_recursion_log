@@ -226,7 +226,7 @@ class RecursionLogPlugin(Star):
     def _inject_text(self, req: ProviderRequest, text: str) -> None:
         if self._inject_position == "system_prompt":
             current = req.system_prompt or ""
-            req.system_prompt = current + "\n\n" + text if current else text
+            req.system_prompt = current.rstrip() + "\n\n" + text if current.strip() else text
         elif self._inject_position == "user_message_before":
             req.prompt = text + "\n\n" + (req.prompt or "")
         else:  # user_message_after
