@@ -6,7 +6,8 @@ first user message, or into the system prompt on every LLM request.
 Entries are organized by sections (e.g., states, deltas, unresolved
 threads) and managed via a Web UI.
 
-No chat commands — all entry management is done through the Web UI.
+Chat command /rl view (aliases: show, preview) shows the exact injection
+payload and the configured injection position without changing any entries.
 
 Injection priority: -498 (runs after FirstWindowInject at -499,
 so that FirstWindowInject's content appears above the recursion log
@@ -219,6 +220,53 @@ class RecursionLogPlugin(Star):
 
         return "\n".join(parts)
 
+    def _current_payload(self) -> tuple[str | None, list[dict] | None]:
+        """Single source of truth for injection and /rl view rendering."""
+        is_system = self._inject_position == "system_prompt"
+
+        if not self._inject_entries:
+            # Keep the existing footer-only behavior in user-message modes.
+            return (None if is_system else self._footer_text or None), None
+
+        data = self._load_data()
+        return self._build_inject_block(data, include_footer=not is_system), data
+
+    # -------------------------------------------------------------------
+    # Inspection command
+    # -------------------------------------------------------------------
+
+    @filter.command_group("rl")
+    def rl(self):
+        pass
+
+    @rl.command("view", alias={"show", "preview"})
+    async def rl_view(self, event: AstrMessageEvent):
+        """Preview the exact payload for the configured injection mode."""
+        try:
+            payload, _ = self._current_payload()
+            if self._inject_position == "system_prompt":
+                timing = "每次 LLM 请求，附加到 system prompt 末尾"
+            else:
+                timing = (
+                    "新窗口开头（contexts 数量 ≤ "
+                    f"{self._initial_ctx_count}），附加到当前用户消息"
+                )
+
+            heading = (
+                "💜 Recursion Log · Preview\n"
+                f"插入位置：{self._inject_position}\n"
+                f"注入时机：{timing}"
+            )
+            if payload is None:
+                yield event.plain_result(heading + "\n\n（目前没有任何内容会被注入）")
+            else:
+                # The payload below this blank line is verbatim. Do not
+                # wrap, reformat, or truncate it in this command.
+                yield event.plain_result(heading + "\n\n" + payload)
+        except Exception as e:
+            logger.error(f"[💜 RecursionLog] preview error: {e}", exc_info=True)
+            yield event.plain_result("💜 Recursion Log：预览失败，请查看插件日志。")
+
     # -------------------------------------------------------------------
     # Injection
     # -------------------------------------------------------------------
@@ -246,23 +294,15 @@ class RecursionLogPlugin(Star):
                 if ctx_count > self._initial_ctx_count:
                     return
 
-            if not self._inject_entries:
-                # User modes retain the footer-only behavior.
-                if not is_system and self._footer_text:
-                    self._inject_text(req, self._footer_text)
-                return
-
-            data = self._load_data()
-            block = self._build_inject_block(data, include_footer=not is_system)
-
+            block, data = self._current_payload()
             if block is None:
-                # No enabled entries: system mode injects nothing.
-                # User modes retain the existing footer-only behavior.
-                if not is_system and self._footer_text:
-                    self._inject_text(req, self._footer_text)
                 return
 
             self._inject_text(req, block)
+
+            # Preserve the old footer-only path: no active-entry log.
+            if not self._inject_entries:
+                return
 
             # Count active entries for logging
             active_count = 0
